@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>BLACK MARKET</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background-color: #0d0f12;
+      color: #f3f4f6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .header {
+      width: 100%;
+      text-align: center;
+      margin-top: 10px;
+      margin-bottom: 25px;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #9ca3af;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .card {
+      background: #16191f;
+      border: 1px solid #232730;
+      border-radius: 18px;
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .user-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      font-size: 14px;
+      color: #9ca3af;
+    }
+    .user-name {
+      color: #f3f4f6;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .balance-box {
+      text-align: center;
+      padding: 20px 0;
+      border-top: 1px solid #232730;
+      border-bottom: 1px solid #232730;
+      margin-bottom: 15px;
+    }
+    .balance-label {
+      font-size: 12px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .balance-value {
+      font-size: 34px;
+      font-weight: 800;
+      color: #10b981;
+    }
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #9ca3af;
+    }
+    .btn {
+      width: 100%;
+      max-width: 400px;
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: 700;
+      border-radius: 14px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn:active {
+      opacity: 0.8;
+    }
+    .btn-bonus {
+      background: #059669;
+    }
+    .btn-disabled {
+      background: #374151;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+    .alert-box {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      text-align: center;
+      display: none;
+    }
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
+    .alert-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #6ee7b7;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="title">BLACK MARKET</div>
+    <div class="subtitle">Экономический Синдикат</div>
+  </div>
+
+  <div class="card">
+    <div class="user-info">
+      <div>Игрок: <span id="playerName" class="user-name">Загрузка...</span></div>
+      <div id="playerTag" style="font-size: 12px; color: #6b7280;">ID: ...</div>
+    </div>
+    <div class="balance-box">
+      <div class="balance-label">Баланс наличных</div>
+      <div id="balance" class="balance-value">0 $</div>
+    </div>
+    <div class="stats-row">
+      <span>Непогашенный бонус:</span>
+      <span id="bonusDebt" style="color: #f87171;">0 $</span>
+    </div>
+  </div>
+
+  <button id="bonusBtn" class="btn btn-bonus" onclick="claimBonus()">
+    Получить бонус +50 000 $
+  </button>
+
+  <div id="alertBox" class="alert-box"></div>
+
+  <script>
+    const SUPABASE_URL = 'sb_publishable_pvKxiUu22vc2z6NUGT7alQ_Wcpl7FNC';
+    const SUPABASE_ANON_KEY = 'https://zachxvrbvejoronqzrpy.supabase.co/rest/v1/';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    const user = tg.initDataUnsafe?.user || {
+      id: 999001,
+      first_name: 'Тестовый Игрок',
+      username: 'test_user'
+    };
+
+    let currentPlayer = null;
+
+    function showAlert(msg, isSuccess = false) {
+      const box = document.getElementById('alertBox');
+      box.style.display = 'block';
+      box.className = 'alert-box ' + (isSuccess ? 'alert-success' : 'alert-error');
+      box.innerText = msg;
+      setTimeout(() => { box.style.display = 'none'; }, 4000);
+    }
+
+    async function initUser() {
+      try {
+        const { data, error } = await supabase.rpc('get_or_create_player', {
+          p_id: user.id,
+          p_username: user.username || '',
+          p_first_name: user.first_name || 'Аноним'
+        });
+
+        if (error) throw error;
+
+        currentPlayer = data;
+        updateUI();
+      } catch (err) {
+        showAlert('Ошибка подключения к базе: ' + err.message);
+      }
+    }
+
+    function updateUI() {
+      if (!currentPlayer) return;
+      document.getElementById('playerName').innerText = currentPlayer.first_name;
+      document.getElementById('playerTag').innerText = 'ID: ' + currentPlayer.id;
+      document.getElementById('balance').innerText = Number(currentPlayer.balance).toLocaleString('ru-RU') + ' $';
+      document.getElementById('bonusDebt').innerText = Number(currentPlayer.bonus_debt).toLocaleString('ru-RU') + ' $';
+
+      const btn = document.getElementById('bonusBtn');
+      if (currentPlayer.balance >= 1500 || currentPlayer.bonus_debt > 0) {
+        btn.classList.add('btn-disabled');
+      } else {
+        btn.classList.remove('btn-disabled');
+      }
+    }
+
+    async function claimBonus() {
+      const btn = document.getElementById('bonusBtn');
+      btn.innerText = 'Проверка...';
+
+      try {
+        const { data, error } = await supabase.rpc('claim_bonus', {
+          p_id: user.id
+        });
+
+        if (error) throw error;
+
+        if (data.success) {
+          showAlert('Бонус +50 000 $ зачислен!', true);
+          currentPlayer.balance = data.new_balance;
+          currentPlayer.bonus_debt = 50000;
+          updateUI();
+        } else {
+          showAlert(data.message);
+        }
+      } catch (err) {
+        showAlert('Ошибка сервера: ' + err.message);
+      } finally {
+        btn.innerText = 'Получить бонус +50 000 $';
+      }
+    }
+
+    initUser();
+  </script>
+</body>
+</html>
