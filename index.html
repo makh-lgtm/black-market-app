@@ -11,7 +11,7 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
@@ -95,7 +95,7 @@
     .btn {
       width: 100%;
       max-width: 400px;
-      background: #2563eb;
+      background: #059669;
       color: #ffffff;
       border: none;
       padding: 16px;
@@ -103,42 +103,22 @@
       font-weight: 700;
       border-radius: 14px;
       cursor: pointer;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-      transition: opacity 0.2s;
-    }
-    .btn:active {
-      opacity: 0.8;
-    }
-    .btn-bonus {
-      background: #059669;
     }
     .btn-disabled {
       background: #374151;
       color: #9ca3af;
-      cursor: not-allowed;
     }
-    .alert-box {
+    #debugLog {
       width: 100%;
       max-width: 400px;
-      margin-top: 14px;
+      margin-top: 15px;
       padding: 12px;
       border-radius: 10px;
-      font-size: 13px;
-      text-align: center;
-      display: none;
-    }
-    .alert-error {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid #ef4444;
-      color: #fca5a5;
-    }
-    .alert-success {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid #10b981;
-      color: #6ee7b7;
+      font-size: 12px;
+      background: #1e1b18;
+      border: 1px solid #d97706;
+      color: #fbbf24;
+      word-break: break-all;
     }
   </style>
 </head>
@@ -151,68 +131,86 @@
 
   <div class="card">
     <div class="user-info">
-      <div>Игрок: <span id="playerName" class="user-name">Загрузка...</span></div>
+      <div>Игрок: <span id="playerName" class="user-name">Поиск профиля...</span></div>
       <div id="playerTag" style="font-size: 12px; color: #6b7280;">ID: ...</div>
     </div>
     <div class="balance-box">
       <div class="balance-label">Баланс наличных</div>
-      <div id="balance" class="balance-value">0 $</div>
+      <div id="balance" class="balance-value">... $</div>
     </div>
     <div class="stats-row">
       <span>Непогашенный бонус:</span>
-      <span id="bonusDebt" style="color: #f87171;">0 $</span>
+      <span id="bonusDebt" style="color: #f87171;">... $</span>
     </div>
   </div>
 
-  <button id="bonusBtn" class="btn btn-bonus" onclick="claimBonus()">
+  <button id="bonusBtn" class="btn" onclick="claimBonus()">
     Получить бонус +50 000 $
   </button>
 
-  <div id="alertBox" class="alert-box"></div>
+  <div id="debugLog">Инициализация игры...</div>
 
   <script>
-    const SUPABASE_URL = 'sb_publishable_pvKxiUu22vc2z6NUGT7alQ_Wcpl7FNC';
-    const SUPABASE_ANON_KEY = 'https://zachxvrbvejoronqzrpy.supabase.co/rest/v1/';
+    const SUPABASE_URL = 'ТВОЙ_API_URL';
+    const SUPABASE_ANON_KEY = 'ТВОЙ_PUBLISHABLE_KEY';
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
-
-    const user = tg.initDataUnsafe?.user || {
-      id: 999001,
-      first_name: 'Тестовый Игрок',
-      username: 'test_user'
-    };
-
-    let currentPlayer = null;
-
-    function showAlert(msg, isSuccess = false) {
-      const box = document.getElementById('alertBox');
-      box.style.display = 'block';
-      box.className = 'alert-box ' + (isSuccess ? 'alert-success' : 'alert-error');
-      box.innerText = msg;
-      setTimeout(() => { box.style.display = 'none'; }, 4000);
+    const logEl = document.getElementById('debugLog');
+    function log(msg) {
+      logEl.innerText = msg;
     }
 
-    async function initUser() {
+    let supabaseClient = null;
+    let tgUser = null;
+    let currentPlayer = null;
+
+    try {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      log('Supabase подключен.');
+    } catch (e) {
+      log('Ошибка создания Supabase клиента: ' + e.message);
+    }
+
+    try {
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+        tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+
+    // Если запуск не из Telegram, даем временный ID
+    if (!tgUser || !tgUser.id) {
+      tgUser = { id: 777001, first_name: 'Игрок', username: 'browser_user' };
+      log('Запущено без Telegram ID, используем тестовый ID');
+    } else {
+      log('Пользователь определён: ' + tgUser.first_name + ' (ID: ' + tgUser.id + ')');
+    }
+
+    async function init() {
       try {
-        const { data, error } = await supabase.rpc('get_or_create_player', {
-          p_id: user.id,
-          p_username: user.username || '',
-          p_first_name: user.first_name || 'Аноним'
+        log('Отправка запроса в базу...');
+        const { data, error } = await supabaseClient.rpc('get_or_create_player', {
+          p_id: tgUser.id,
+          p_username: tgUser.username || '',
+          p_first_name: tgUser.first_name || 'Игрок'
         });
 
-        if (error) throw error;
+        if (error) {
+          log('Ошибка RPC get_or_create_player: ' + error.message);
+          return;
+        }
 
         currentPlayer = data;
-        updateUI();
+        log('Профиль загружен успешно!');
+        render();
       } catch (err) {
-        showAlert('Ошибка подключения к базе: ' + err.message);
+        log('Сбой сети: ' + err.message);
       }
     }
 
-    function updateUI() {
+    function render() {
       if (!currentPlayer) return;
       document.getElementById('playerName').innerText = currentPlayer.first_name;
       document.getElementById('playerTag').innerText = 'ID: ' + currentPlayer.id;
@@ -232,28 +230,31 @@
       btn.innerText = 'Проверка...';
 
       try {
-        const { data, error } = await supabase.rpc('claim_bonus', {
-          p_id: user.id
+        const { data, error } = await supabaseClient.rpc('claim_bonus', {
+          p_id: tgUser.id
         });
 
-        if (error) throw error;
+        if (error) {
+          log('Ошибка бонуса: ' + error.message);
+          return;
+        }
 
         if (data.success) {
-          showAlert('Бонус +50 000 $ зачислен!', true);
+          log('Бонус зачислен!');
           currentPlayer.balance = data.new_balance;
           currentPlayer.bonus_debt = 50000;
-          updateUI();
+          render();
         } else {
-          showAlert(data.message);
+          log('Отказ: ' + data.message);
         }
       } catch (err) {
-        showAlert('Ошибка сервера: ' + err.message);
+        log('Ошибка вызова: ' + err.message);
       } finally {
         btn.innerText = 'Получить бонус +50 000 $';
       }
     }
 
-    initUser();
+    init();
   </script>
 </body>
 </html>
